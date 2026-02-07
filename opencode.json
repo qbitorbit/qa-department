@@ -1,0 +1,152 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "vllm//models/MiniMax/MiniMax-M2.1",
+  "share": "disabled",
+  
+  "provider": {
+    "vllm": {
+      "name": "VLLM (local)",
+      "options": {
+        "baseURL": "http://10.202.1.3:8000/v1",
+        "apiKey": ""
+      },
+      "models": {
+        "/models/MiniMax/MiniMax-M2.1": {
+          "name": "/models/MiniMax/MiniMax-M2.1"
+        },
+        "/models/openai/gpt-oss-120b": {
+          "name": "/models/openai/gpt-oss-120b"
+        },
+        "/models/Qwen/Qwen3-Coder-30B-A3B-Instruct": {
+          "name": "/models/Qwen/Qwen3-Coder-30B-A3B-Instruct"
+        },
+        "/models/Qwen/Qwen3-VL-30B-A3B-Instruct": {
+          "name": "/models/Qwen/Qwen3-VL-30B-A3B-Instruct"
+        }
+      }
+    }
+  },
+
+  "models": {
+    "/models/MiniMax/MiniMax-M2.1": {
+      "path": "/models/MiniMax/MiniMax-M2.1",
+      "permission": {
+        "edit": "ask",
+        "shell": "ask",
+        "bash": "deny",
+        "webfetch": "deny"
+      },
+      "options": {
+        "frequency_penalty": 0.5,
+        "presence_penalty": 0.2,
+        "top_p": 0.95,
+        "temperature": 0.7,
+        "context_window": 64000,
+        "auto_compact": true,
+        "timeout": 120000,
+        "stream": true
+      }
+    },
+    "/models/openai/gpt-oss-120b": {
+      "path": "/models/openai/gpt-oss-120b",
+      "permission": {
+        "edit": "ask",
+        "shell": "ask",
+        "bash": "deny",
+        "webfetch": "deny"
+      },
+      "options": {
+        "frequency_penalty": 0.5,
+        "presence_penalty": 0.2,
+        "top_p": 0.95,
+        "temperature": 0.5,
+        "context_window": 120000,
+        "auto_compact": true,
+        "timeout": 120000,
+        "stream": true
+      }
+    },
+    "/models/Qwen/Qwen3-Coder-30B-A3B-Instruct": {
+      "path": "/models/Qwen/Qwen3-Coder-30B-A3B-Instruct",
+      "permission": {
+        "edit": "ask",
+        "shell": "ask",
+        "bash": "deny",
+        "webfetch": "deny"
+      },
+      "options": {
+        "frequency_penalty": 0.5,
+        "presence_penalty": 0.2,
+        "top_p": 0.95,
+        "temperature": 0.55,
+        "context_window": 30000,
+        "auto_compact": true,
+        "timeout": 120000,
+        "stream": true
+      }
+    },
+    "/models/Qwen/Qwen3-VL-30B-A3B-Instruct": {
+      "path": "/models/Qwen/Qwen3-VL-30B-A3B-Instruct",
+      "permission": {
+        "edit": "deny",
+        "shell": "deny",
+        "bash": "deny",
+        "webfetch": "deny"
+      },
+      "options": {
+        "frequency_penalty": 0.3,
+        "presence_penalty": 0.1,
+        "top_p": 0.9,
+        "temperature": 0.3,
+        "context_window": 30000,
+        "auto_compact": true,
+        "timeout": 120000,
+        "stream": true
+      }
+    }
+  },
+
+  "lsp": {
+    "python": {
+      "command": ["pyright-langserver", "--stdio"],
+      "extensions": [".py"],
+      "disabled": false
+    },
+    "javascript": {
+      "command": ["typescript-language-server", "--stdio"],
+      "extensions": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"],
+      "disabled": false
+    },
+    "go": {
+      "command": ["gopls", "serve"],
+      "extensions": [".go"],
+      "disabled": false
+    }
+  },
+
+  "mcp": {
+    "jira": {
+      "type": "local",
+      "command": ["python3", "/Users/quantum/.config/opencode/mcp/jira/server.py"],
+      "environment": {
+        "JIRA_BASE_URL": "${JIRA_BASE_URL}",
+        "JIRA_USERNAME": "${JIRA_USERNAME}",
+        "JIRA_API_TOKEN": "${JIRA_API_TOKEN}"
+      },
+      "enabled": true,
+      "timeout": 60000
+    },
+    "confluence": {
+      "type": "local",
+      "command": ["python3", "/Users/quantum/.config/opencode/mcp/confluence/server.py"],
+      "environment": {
+        "CONFLUENCE_BASE_URL": "${CONFLUENCE_BASE_URL}",
+        "CONFLUENCE_BROWSER_URL": "${CONFLUENCE_BROWSER_URL}",
+        "CONFLUENCE_USERNAME": "${CONFLUENCE_USERNAME}",
+        "CONFLUENCE_PASSWORD": "${CONFLUENCE_PASSWORD}"
+      },
+      "enabled": true,
+      "timeout": 60000
+    }
+  }
+}
