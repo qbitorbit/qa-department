@@ -7,7 +7,7 @@
     "vllm": {
       "name": "VLLM (local)",
       "options": {
-        "baseURL": "http://10.202.1.3:8000/v1",
+        "baseURL": "http://ip:8000/v1",
         "apiKey": ""
       },
       "models": {
