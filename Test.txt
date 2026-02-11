@@ -1,0 +1,230 @@
+# ClaudeCodeNetworkMonitor.ps1
+# Run this script BEFORE disconnecting from network to establish baseline,
+# then run again AFTER disconnect to see what fails
+
+param(
+    [switch]$Baseline,
+    [switch]$Disconnected,
+    [string]$LogPath = "$env:USERPROFILE\Desktop\ClaudeCodeNetworkAnalysis"
+)
+
+# Create log directory
+New-Item -ItemType Directory -Force -Path $LogPath | Out-Null
+
+$timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
+$mode = if ($Baseline) { "baseline" } elseif ($Disconnected) { "disconnected" } else { "analysis" }
+$logFile = "$LogPath\claude_network_${mode}_${timestamp}.log"
+
+function Write-Log {
+    param($Message)
+    $entry = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - $Message"
+    Write-Host $entry
+    Add-Content -Path $logFile -Value $entry
+}
+
+Write-Log "=== Claude Code Network Monitoring Started ==="
+Write-Log "Mode: $mode"
+Write-Log "Log file: $logFile"
+
+# Check if Claude Code is installed
+Write-Log "`n--- Checking Claude Code Installation ---"
+$claudePath = Get-Command claude -ErrorAction SilentlyContinue
+if ($claudePath) {
+    Write-Log "Claude Code found at: $($claudePath.Source)"
+} else {
+    Write-Log "WARNING: Claude Code not found in PATH"
+    Write-Log "Looking for Claude Code installation..."
+    
+    # Common installation paths
+    $possiblePaths = @(
+        "$env:USERPROFILE\.claude",
+        "$env:LOCALAPPDATA\Claude",
+        "$env:APPDATA\Claude",
+        "C:\Program Files\Claude",
+        "$env:USERPROFILE\AppData\Local\Programs\Claude"
+    )
+    
+    foreach ($path in $possiblePaths) {
+        if (Test-Path $path) {
+            Write-Log "Found Claude directory: $path"
+            Get-ChildItem -Path $path -Recurse -ErrorAction SilentlyContinue | 
+                Select-Object FullName | ForEach-Object { Write-Log "  - $($_.FullName)" }
+        }
+    }
+}
+
+# Check network connectivity
+Write-Log "`n--- Network Connectivity Check ---"
+$networkTests = @(
+    @{Host="8.8.8.8"; Description="Google DNS"},
+    @{Host="1.1.1.1"; Description="Cloudflare DNS"},
+    @{Host="api.anthropic.com"; Description="Anthropic API"},
+    @{Host="claude.ai"; Description="Claude Web"},
+    @{Host="github.com"; Description="GitHub"},
+    @{Host="npmjs.com"; Description="NPM Registry"},
+    @{Host="pypi.org"; Description="Python Package Index"}
+)
+
+foreach ($test in $networkTests) {
+    $result = Test-Connection -ComputerName $test.Host -Count 1 -Quiet -ErrorAction SilentlyContinue
+    $status = if ($result) { "REACHABLE" } else { "UNREACHABLE" }
+    Write-Log "$status - $($test.Description) ($($test.Host))"
+}
+
+# DNS Resolution Check
+Write-Log "`n--- DNS Resolution Check ---"
+$dnsHosts = @("api.anthropic.com", "claude.ai", "github.com", "raw.githubusercontent.com")
+foreach ($host in $dnsHosts) {
+    try {
+        $resolved = [System.Net.Dns]::GetHostAddresses($host)
+        Write-Log "RESOLVED - $host -> $($resolved.IPAddressToString -join ', ')"
+    } catch {
+        Write-Log "FAILED - $host - $($_.Exception.Message)"
+    }
+}
+
+# Start network capture in background
+Write-Log "`n--- Starting Network Monitoring ---"
+Write-Log "Preparing to capture network activity..."
+
+# Start packet capture job (requires admin)
+$captureFile = "$LogPath\network_capture_${mode}_${timestamp}.txt"
+$captureJob = Start-Job -ScriptBlock {
+    param($OutputFile)
+    netstat -ano 1 > $OutputFile
+} -ArgumentList $captureFile
+
+Write-Log "Network capture started (Job ID: $($captureJob.Id))"
+
+# Monitor active connections
+Write-Log "`n--- Current Active Connections ---"
+$connections = Get-NetTCPConnection -State Established -ErrorAction SilentlyContinue
+$connections | Select-Object LocalAddress, LocalPort, RemoteAddress, RemotePort, State, OwningProcess | 
+    ForEach-Object {
+        $process = Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue
+        Write-Log "Connection: $($_.LocalAddress):$($_.LocalPort) -> $($_.RemoteAddress):$($_.RemotePort) | Process: $($process.Name) (PID: $($_.OwningProcess))"
+    }
+
+# Check firewall rules
+Write-Log "`n--- Firewall Rules Check ---"
+$firewallRules = Get-NetFirewallRule -DisplayName "*Claude*" -ErrorAction SilentlyContinue
+if ($firewallRules) {
+    $firewallRules | ForEach-Object {
+        Write-Log "Firewall Rule: $($_.DisplayName) - Direction: $($_.Direction) - Action: $($_.Action) - Enabled: $($_.Enabled)"
+    }
+} else {
+    Write-Log "No specific Claude firewall rules found"
+}
+
+# Check proxy settings
+Write-Log "`n--- Proxy Configuration ---"
+$proxySettings = Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
+Write-Log "Proxy Enabled: $($proxySettings.ProxyEnable)"
+if ($proxySettings.ProxyEnable -eq 1) {
+    Write-Log "Proxy Server: $($proxySettings.ProxyServer)"
+    Write-Log "Proxy Override: $($proxySettings.ProxyOverride)"
+}
+
+# Check environment variables
+Write-Log "`n--- Environment Variables (Proxy/Network) ---"
+$envVars = @("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY", "NODE_EXTRA_CA_CERTS")
+foreach ($var in $envVars) {
+    $value = [Environment]::GetEnvironmentVariable($var)
+    if ($value) {
+        Write-Log "$var = $value"
+    } else {
+        Write-Log "$var = (not set)"
+    }
+}
+
+Write-Log "`n--- Attempting to Launch Claude Code ---"
+Write-Log "This is where you should run: claude"
+Write-Log "Press Enter after you've attempted to run Claude Code..."
+Read-Host
+
+# Check for Claude processes
+Write-Log "`n--- Claude Processes Check ---"
+$claudeProcesses = Get-Process -Name "*claude*" -ErrorAction SilentlyContinue
+if ($claudeProcesses) {
+    $claudeProcesses | ForEach-Object {
+        Write-Log "Process: $($_.Name) (PID: $($_.Id)) - Path: $($_.Path)"
+        
+        # Check network connections for this process
+        $processConnections = Get-NetTCPConnection -OwningProcess $_.Id -ErrorAction SilentlyContinue
+        if ($processConnections) {
+            Write-Log "  Connections for PID $($_.Id):"
+            $processConnections | ForEach-Object {
+                Write-Log "    -> $($_.RemoteAddress):$($_.RemotePort) (State: $($_.State))"
+            }
+        }
+    }
+} else {
+    Write-Log "No Claude processes currently running"
+}
+
+# Stop network capture
+Stop-Job -Job $captureJob
+Receive-Job -Job $captureJob
+Remove-Job -Job $captureJob
+Write-Log "`nNetwork capture saved to: $captureFile"
+
+# Check Windows Event Logs for errors
+Write-Log "`n--- Recent Application Errors ---"
+$errorEvents = Get-WinEvent -FilterHashtable @{LogName='Application'; Level=2; StartTime=(Get-Date).AddMinutes(-5)} -MaxEvents 20 -ErrorAction SilentlyContinue
+if ($errorEvents) {
+    $errorEvents | ForEach-Object {
+        Write-Log "Error: $($_.TimeCreated) - $($_.ProviderName) - $($_.Message.Substring(0, [Math]::Min(200, $_.Message.Length)))"
+    }
+}
+
+Write-Log "`n=== Monitoring Complete ==="
+Write-Log "Results saved to: $logFile"
+Write-Log "`nNext Steps:"
+Write-Log "1. Run with -Baseline flag while connected to network"
+Write-Log "2. Disconnect from network"
+Write-Log "3. Run with -Disconnected flag"
+Write-Log "4. Compare the two log files to see what failed"
+
+# Create comparison script
+$compareScript = @'
+# CompareClaudeLogs.ps1
+param(
+    [string]$BaselineLog,
+    [string]$DisconnectedLog
+)
+
+Write-Host "`n=== Comparing Network Access ===" -ForegroundColor Cyan
+
+$baseline = Get-Content $BaselineLog
+$disconnected = Get-Content $DisconnectedLog
+
+Write-Host "`n--- DNS Resolution Differences ---" -ForegroundColor Yellow
+$baselineDNS = $baseline | Select-String "RESOLVED|FAILED" 
+$disconnectedDNS = $disconnected | Select-String "RESOLVED|FAILED"
+
+Compare-Object $baselineDNS $disconnectedDNS | ForEach-Object {
+    $indicator = if ($_.SideIndicator -eq "<=") { "BASELINE ONLY" } else { "DISCONNECTED ONLY" }
+    Write-Host "$indicator : $($_.InputObject)" -ForegroundColor $(if ($_.SideIndicator -eq "<=") { "Green" } else { "Red" })
+}
+
+Write-Host "`n--- Connectivity Differences ---" -ForegroundColor Yellow
+$baselineConn = $baseline | Select-String "REACHABLE|UNREACHABLE"
+$disconnectedConn = $disconnected | Select-String "REACHABLE|UNREACHABLE"
+
+Compare-Object $baselineConn $disconnectedConn | ForEach-Object {
+    $indicator = if ($_.SideIndicator -eq "<=") { "BASELINE ONLY" } else { "DISCONNECTED ONLY" }
+    Write-Host "$indicator : $($_.InputObject)" -ForegroundColor $(if ($_.SideIndicator -eq "<=") { "Green" } else { "Red" })
+}
+
+Write-Host "`n--- Process Differences ---" -ForegroundColor Yellow
+$baselineProc = $baseline | Select-String "Process:"
+$disconnectedProc = $disconnected | Select-String "Process:"
+
+Compare-Object $baselineProc $disconnectedProc | ForEach-Object {
+    Write-Host "$($_.SideIndicator) : $($_.InputObject)"
+}
+'@
+
+$compareScriptPath = "$LogPath\CompareClaudeLogs.ps1"
+Set-Content -Path $compareScriptPath -Value $compareScript
+Write-Log "`nComparison script created: $compareScriptPath"
